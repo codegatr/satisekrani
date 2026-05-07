@@ -9,13 +9,21 @@ $db = db();
 
 // İstatistikler
 $stats = [
-    'kullanici'   => (int)$db->query('SELECT COUNT(*) FROM tk_users WHERE aktif=1')->fetchColumn(),
-    'stok'        => (int)$db->query('SELECT COUNT(*) FROM tk_stoklar WHERE aktif=1')->fetchColumn(),
-    'firma'       => (int)$db->query('SELECT COUNT(*) FROM tk_firmalar')->fetchColumn(),
-    'iskonto_grup'=> (int)$db->query('SELECT COUNT(*) FROM tk_iskonto_gruplar')->fetchColumn(),
-    'fiyat_kalem' => (int)$db->query('SELECT COUNT(*) FROM tk_fiyat_listesi WHERE aktif=1')->fetchColumn(),
-    'kategori'    => (int)$db->query('SELECT COUNT(DISTINCT kategori_kod) FROM tk_fiyat_listesi WHERE aktif=1')->fetchColumn(),
+    'kullanici'   => 0, 'stok' => 0, 'firma' => 0, 'iskonto_grup' => 0,
+    'fiyat_kalem' => 0, 'kategori' => 0,
 ];
+$tablo_sorgulari = [
+    'kullanici'   => 'SELECT COUNT(*) FROM tk_users WHERE aktif=1',
+    'stok'        => 'SELECT COUNT(*) FROM tk_stoklar WHERE aktif=1',
+    'firma'       => 'SELECT COUNT(*) FROM tk_firmalar',
+    'iskonto_grup'=> 'SELECT COUNT(*) FROM tk_iskonto_gruplar',
+    'fiyat_kalem' => 'SELECT COUNT(*) FROM tk_fiyat_listesi WHERE aktif=1',
+    'kategori'    => 'SELECT COUNT(DISTINCT kategori_kod) FROM tk_fiyat_listesi WHERE aktif=1',
+];
+foreach ($tablo_sorgulari as $k => $q) {
+    try { $stats[$k] = (int)$db->query($q)->fetchColumn(); }
+    catch (PDOException $e) { /* tablo yoksa 0 kalır */ }
+}
 
 $kur_usd = kur_get('USD');
 $kur_eur = kur_get('EUR');

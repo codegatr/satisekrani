@@ -1,28 +1,19 @@
 {
     "name": "Tekcan Fiyat Ekranı",
-    "version": "1.3.0",
+    "version": "1.3.1",
     "release_date": "2026-05-07",
     "repo": "codegatr/satisekrani",
     "min_php": "8.3.0",
-    "description": "Tekcan Metal personel fiyat görüntüleme ekranı - PHP 8.3+ / MariaDB / TCMB",
-    "changelog_v1.3.0": [
-        "ANA EKRAN DEĞİŞTİ: Sepet/teklif sistemi yerine Excel'in birebir karşılığı fiyat ekranı",
-        "Yeni tablo: tk_fiyat_listesi (Excel kategorileri + ~84 kalem seed)",
-        "Yeni tablo: tk_kroman_baz (Kroman baz fiyatlar)",
-        "Yeni admin sayfası: fiyat_listesi.php (kategori bazlı inline fiyat düzenleme)",
-        "Stok düzenleme sayfası: admin/stok_duzenle.php (önceki linkteki 500 hatası giderildi)",
-        "Yeni sayfa: arama.php (malzeme arama + iskontolu net fiyat hesaplama)",
-        "Üst bar: TCMB kuru, Vade Farkı, Kur Güncelle butonu",
-        "Eski teklif sistemi kaldırılmadı, /teklif_olustur.php olarak korundu (gerekirse erişilebilir)"
+    "description": "Tekcan Metal personel fiyat görüntüleme ekranı",
+    "changelog_v1.3.1": [
+        "FIX: 500 hatası giderildi - manuel yüklemede eksik tablo durumunda defansif kod",
+        "FIX: Repo adresi codegatr/satisekrani olarak güncellendi (404 hatası giderildi)",
+        "Otomatik schema migration: bootstrap her istekte schema_version kontrol eder, gerekirse sql/ klasöründeki migration scriptlerini sırayla çalıştırır",
+        "tk_ayarlar.schema_version ile tek seferlik tetiklenir (idempotent, performans dostu)",
+        "Tablolar eksikse kullanıcıya yumuşak uyarı gösterilir, sayfa yine açılır"
     ],
     "exclude_files": [
-        "config.php",
-        ".gitignore",
-        ".git/",
-        "README.md",
-        "sql/",
-        "install.php",
-        "manifest.json"
+        "config.php", ".gitignore", ".git/", "README.md", "sql/", "install.php", "manifest.json"
     ],
     "post_update_sql": [
         "CREATE TABLE IF NOT EXISTS `tk_update_log` (`id` INT UNSIGNED NOT NULL AUTO_INCREMENT, `eski_surum` VARCHAR(20) DEFAULT NULL, `yeni_surum` VARCHAR(20) DEFAULT NULL, `durum` ENUM('basarili','hata','baslatildi') NOT NULL, `aciklama` TEXT, `kullanici_id` INT UNSIGNED DEFAULT NULL, `ip` VARCHAR(45) DEFAULT NULL, `tarih` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (`id`), KEY `ix_tarih` (`tarih`)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_turkish_ci",

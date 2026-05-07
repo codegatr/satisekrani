@@ -11,47 +11,56 @@ require_login();
 
 $db = db();
 
-// === Veri çek ===
+// === Veri çek (defansif - eksik tablo/kayıt durumunda hata vermesin) ===
 
 // 1) Döviz kurları
 $kur_usd = kur_get('USD');
 $kur_eur = kur_get('EUR');
+$kur_tarih = $kur_usd['tarih'] ?: $kur_eur['tarih'] ?: 'now';
 
 // 2) Vade farkı, nakliye, kar marjı
-$vade_farki = (float)ayar_get('vade_farki_aylik', 6);
-$nakliye    = (float)ayar_get('nakliye_bedeli', 0.75);
-$kar_marji  = (float)ayar_get('sac_hadde_kar_marji', 1.0);
+$vade_farki = (float)ayar_get('vade_farki_aylik', '6');
+$nakliye    = (float)ayar_get('nakliye_bedeli', '0.75');
+$kar_marji  = (float)ayar_get('sac_hadde_kar_marji', '1.0');
 
 // 3) Firma iskonto oranları (YÜCEL, ÇAYIROVA, TOSÇELİK)
-//    tk_firma_iskonto JOIN tk_iskonto_gruplar
 $iskonto_per_firma = [];
-$sql = "SELECT f.id firma_id, f.kod firma_kod, f.ad firma_ad,
-               g.id grup_id, g.ad grup_ad,
-               fi.alis_iskonto, fi.satis_iskonto
-        FROM tk_firma_iskonto fi
-        JOIN tk_firmalar f         ON f.id = fi.firma_id
-        JOIN tk_iskonto_gruplar g  ON g.id = fi.iskonto_grup_id
-        WHERE f.kod IN ('YUCEL','CAYIROVA','TOSCELIK')
-        ORDER BY f.id, g.ad";
-foreach ($db->query($sql) as $r) {
-    $iskonto_per_firma[$r['firma_kod']][] = $r;
-}
+try {
+    $sql = "SELECT f.id firma_id, f.kod firma_kod, f.ad firma_ad,
+                   g.id grup_id, g.ad grup_ad,
+                   fi.alis_iskonto, fi.satis_iskonto
+            FROM tk_firma_iskonto fi
+            JOIN tk_firmalar f         ON f.id = fi.firma_id
+            JOIN tk_iskonto_gruplar g  ON g.id = fi.iskonto_grup_id
+            WHERE f.kod IN ('YUCEL','CAYIROVA','TOSCELIK')
+            ORDER BY f.id, g.ad";
+    foreach ($db->query($sql) as $r) {
+        $iskonto_per_firma[$r['firma_kod']][] = $r;
+    }
+} catch (PDOException $e) { /* tablo yoksa boş bırak */ }
 
 // 4) Kroman baz fiyatlar
-$kroman = $db->query('SELECT * FROM tk_kroman_baz WHERE aktif=1 ORDER BY sira')->fetchAll();
+$kroman = [];
+try {
+    $kroman = $db->query('SELECT * FROM tk_kroman_baz WHERE aktif=1 ORDER BY sira')->fetchAll();
+} catch (PDOException $e) { /* tablo yoksa boş */ }
 
 // 5) Fiyat listesi (Excel'in birebir karşılığı)
 $fiyatlar_per_kategori = [];
 $kategori_basliklari   = [];
-$sql = "SELECT * FROM tk_fiyat_listesi WHERE aktif=1 ORDER BY kategori_sira, satir_sira";
-foreach ($db->query($sql) as $r) {
-    $kk = $r['kategori_kod'];
-    if (!isset($fiyatlar_per_kategori[$kk])) {
-        $fiyatlar_per_kategori[$kk] = [];
-        $kategori_basliklari[$kk] = $r['kategori_ad'];
+try {
+    $sql = "SELECT * FROM tk_fiyat_listesi WHERE aktif=1 ORDER BY kategori_sira, satir_sira";
+    foreach ($db->query($sql) as $r) {
+        $kk = $r['kategori_kod'];
+        if (!isset($fiyatlar_per_kategori[$kk])) {
+            $fiyatlar_per_kategori[$kk] = [];
+            $kategori_basliklari[$kk] = $r['kategori_ad'];
+        }
+        $fiyatlar_per_kategori[$kk][] = $r;
     }
-    $fiyatlar_per_kategori[$kk][] = $r;
-}
+} catch (PDOException $e) { /* tablo yoksa boş - kullanıcıya uyarı göstereceğiz */ }
+
+$migration_uyari = empty($fiyatlar_per_kategori);
 
 // === Düzen: Excel'deki gibi 3 kolon ===
 // Sol: KOSEBENT, DKP_HRP_BAKL, GALVANIZ_SAC
@@ -89,10 +98,26 @@ require __DIR__ . '/inc/header.php';
             <span class="kur-v"><?= num((float)$kur_eur['satis'], 4) ?></span>
         </div>
         <div class="kur-pill kur-tarih">
-            <span class="kur-v"><?= date('d.m.Y H:i', strtotime($kur_usd['tarih'] ?? 'now')) ?></span>
+            <span class="kur-v"><?= date('d.m.Y H:i', strtotime($kur_tarih)) ?></span>
         </div>
     </div>
 </div>
+
+<?php if ($migration_uyari): ?>
+<div class="alert alert-warning" style="margin-bottom:16px;border-left:4px solid var(--c-warning);">
+    <strong>⚠ Fiyat tablosu boş veya eksik.</strong>
+    <p style="margin:6px 0 0 0;font-size:12px;">
+        Sistemin v1.3.0 migration scripti henüz çalıştırılmamış olabilir. 
+        <?php if ($user['rol'] === 'admin'): ?>
+            <a href="/admin/fiyat_listesi.php"><strong>Fiyat Listesi</strong></a> sayfasından kontrol edin
+            veya <code>sql/04_migration_v1.3.0.sql</code> dosyasını phpMyAdmin'den manuel çalıştırın.
+            <br><em>Not:</em> Sayfayı yenilediğinizde otomatik migration tetiklenir; bu uyarı bir sonraki yenilemede kaybolacaktır.
+        <?php else: ?>
+            Lütfen yöneticinizle iletişime geçin.
+        <?php endif ?>
+    </p>
+</div>
+<?php endif ?>
 
 <!-- BÖLÜM 1: FİRMA İSKONTO ORANLARI -->
 <div class="fiyat-section">

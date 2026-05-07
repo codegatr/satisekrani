@@ -190,3 +190,66 @@ function tr_lower(string $s): string {
     $s = str_replace(['I','İ','Ş','Ğ','Ü','Ö','Ç'], ['ı','i','ş','ğ','ü','ö','ç'], $s);
     return mb_strtolower($s, 'UTF-8');
 }
+
+/**
+ * Şema versiyon takibi + otomatik migration.
+ * Akıllı Güncelle dışı manuel yükleme senaryolarında da yeni tablolar otomatik oluşur.
+ *
+ * Mantık: tk_ayarlar tablosunda 'schema_version' anahtarı kontrol edilir.
+ * Eğer hedef sürümden eski ise sql/ klasöründeki migration scriptleri sırayla çalıştırılır.
+ * Tüm migration scriptleri idempotent (CREATE TABLE IF NOT EXISTS) olmalıdır.
+ */
+function schema_versiyon_kontrol(): void {
+    $hedef = '1.3.0';
+    try {
+        $db = db();
+
+        // tk_ayarlar tablosu yok mu (ilk kurulum)? Sessizce çık - install.php halletsin.
+        $check = $db->query("SHOW TABLES LIKE 'tk_ayarlar'")->fetch();
+        if (!$check) return;
+
+        $st = $db->prepare("SELECT deger FROM tk_ayarlar WHERE anahtar='schema_version'");
+        $st->execute();
+        $mevcut = $st->fetchColumn() ?: '1.0.0';
+
+        if (version_compare($mevcut, $hedef, '>=')) return; // güncel
+
+        // Migration scriptlerini sırayla bul ve çalıştır
+        $sql_dir = __DIR__ . '/../sql';
+        if (!is_dir($sql_dir)) return;
+
+        $scripts = glob($sql_dir . '/0*_migration_v*.sql') ?: [];
+        sort($scripts);
+
+        foreach ($scripts as $script) {
+            // Dosya adından sürüm: 04_migration_v1.3.0.sql -> 1.3.0
+            if (!preg_match('/_v(\d+\.\d+\.\d+)\.sql$/', basename($script), $m)) continue;
+            $script_ver = $m[1];
+
+            // Bu sürüm zaten uygulanmış mı?
+            if (version_compare($mevcut, $script_ver, '>=')) continue;
+
+            $sql = file_get_contents($script);
+            if ($sql === false) continue;
+
+            try {
+                $db->exec($sql);
+            } catch (PDOException $e) {
+                error_log("Migration $script_ver hatası: " . $e->getMessage());
+                // Idempotent değilse veya kısmi hata - devam et
+            }
+        }
+
+        // Sürümü güncelle
+        $db->prepare(
+            "INSERT INTO tk_ayarlar (anahtar, deger) VALUES ('schema_version', ?)
+             ON DUPLICATE KEY UPDATE deger=VALUES(deger)"
+        )->execute([$hedef]);
+
+    } catch (Exception $e) {
+        error_log('Schema versiyon kontrol hatası: ' . $e->getMessage());
+    }
+}
+
+// Çağır - ilk request'te veya sürüm değişiminde tetiklenir
+schema_versiyon_kontrol();
